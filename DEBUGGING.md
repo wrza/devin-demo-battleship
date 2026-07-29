@@ -244,7 +244,10 @@ enabled and absorb clicks.
 
 Mitigation that exists: the hover preview turns red for an invalid placement
 (`cell-preview-invalid`), which covers the mouse case but not keyboard, touch, or "why did nothing
-happen".
+happen". That mitigation is itself partial: `previewCells` only marks cells that exist in the grid,
+so hovering H1 with the Carrier reddens H1–J1 and the two cells that overflow the board are simply
+not drawn — the feedback shows a 3-cell ship, not the 5-cell footprint that is being rejected
+(confirmed in a browser).
 
 **How it was fixed.** Not fixed. Cause-level fix: return the caught error (or its `reason`) on the
 state as a transient `notice` field and render it in the status line, and add
