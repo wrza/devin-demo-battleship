@@ -104,7 +104,7 @@ export function isFleetComplete(board: Board): boolean {
 }
 
 export function allShipsSunk(board: Board): boolean {
-  return isFleetComplete(board) && board.ships.every(isShipSunk);
+  return board.ships.length > 0 && board.ships.every(isShipSunk);
 }
 
 export function hasBeenShot(board: Board, target: Coordinate): boolean {

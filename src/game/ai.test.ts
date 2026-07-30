@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chooseShot, randomFleet, type Random } from './ai';
+import { chooseShot, completeFleet, randomFleet, type Random } from './ai';
 import {
   allShipsSunk,
   createEmptyBoard,
@@ -36,6 +36,30 @@ describe('randomFleet', () => {
       expect(keys.size).toBe(cells.length);
       expect(cells.every((c) => c.row >= 0 && c.row < 10 && c.col >= 0 && c.col < 10)).toBe(true);
     }
+  });
+
+  it('places a valid fleet even when the random source returns the boundary value 1', () => {
+    const board = randomFleet(() => 1);
+
+    expect(isFleetComplete(board)).toBe(true);
+  });
+});
+
+describe('completeFleet', () => {
+  it('keeps existing ships and only places the missing ones', () => {
+    const partial = placeShip(createEmptyBoard(), 'Carrier', { row: 0, col: 0 }, 'horizontal');
+
+    const board = completeFleet(partial, seeded(5));
+
+    expect(isFleetComplete(board)).toBe(true);
+    expect(board.ships.find((ship) => ship.name === 'Carrier')!.cells).toEqual(
+      partial.ships[0].cells,
+    );
+  });
+
+  it('returns a complete board unchanged', () => {
+    const full = randomFleet(seeded(3));
+    expect(completeFleet(full, seeded(5))).toBe(full);
   });
 });
 

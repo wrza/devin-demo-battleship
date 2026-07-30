@@ -1,4 +1,4 @@
-import { chooseShot, randomFleet, type Random } from './ai';
+import { chooseShot, completeFleet, randomFleet, type Random } from './ai';
 import {
   allShipsSunk,
   createEmptyBoard,
@@ -7,6 +7,7 @@ import {
   placeShip,
 } from './engine';
 import {
+  PlacementError,
   SHIP_SPECS,
   type Board,
   type Coordinate,
@@ -27,6 +28,30 @@ export interface GameState {
   orientation: Orientation;
   winner?: Winner;
   log: string[];
+  /** Feedback for the most recent rejected action; cleared by the next accepted one. */
+  notice?: string;
+}
+
+function cellName(target: Coordinate): string {
+  return `${String.fromCharCode(65 + target.col)}${target.row + 1}`;
+}
+
+function withNotice(state: GameState, notice: string): GameState {
+  return { ...state, notice };
+}
+
+function placementNotice(name: ShipName, error: unknown): string {
+  if (error instanceof PlacementError) {
+    switch (error.reason) {
+      case 'out-of-bounds':
+        return `The ${name} does not fit there.`;
+      case 'overlap':
+        return `The ${name} would overlap another ship.`;
+      case 'duplicate-ship':
+        return `The ${name} is already placed.`;
+    }
+  }
+  return `Cannot place the ${name} there.`;
 }
 
 export function nextShipToPlace(state: GameState): ShipName | undefined {
@@ -52,7 +77,7 @@ export function toggleOrientation(state: GameState): GameState {
 }
 
 function describe(who: 'You' | 'Computer', outcome: FireOutcome, target: Coordinate, ship?: ShipName) {
-  const cell = `${String.fromCharCode(65 + target.col)}${target.row + 1}`;
+  const cell = cellName(target);
   switch (outcome) {
     case 'miss':
       return `${who} fired at ${cell}: miss.`;
@@ -65,7 +90,7 @@ function describe(who: 'You' | 'Computer', outcome: FireOutcome, target: Coordin
   }
 }
 
-/** Places the player's next ship. Returns the unchanged state when placement is invalid. */
+/** Places the player's next ship. Explains via `notice` when placement is invalid. */
 export function placePlayerShip(state: GameState, start: Coordinate): GameState {
   const name = nextShipToPlace(state);
   if (state.phase !== 'placement' || !name) return state;
@@ -73,8 +98,8 @@ export function placePlayerShip(state: GameState, start: Coordinate): GameState 
   let playerBoard: Board;
   try {
     playerBoard = placeShip(state.playerBoard, name, start, state.orientation);
-  } catch {
-    return state;
+  } catch (error) {
+    return withNotice(state, placementNotice(name, error));
   }
 
   const placingIndex = state.placingIndex + 1;
@@ -84,21 +109,33 @@ export function placePlayerShip(state: GameState, start: Coordinate): GameState 
     playerBoard,
     placingIndex,
     phase: ready ? 'player-turn' : 'placement',
+    notice: undefined,
     log: ready
       ? [...state.log, 'Fleet ready. Fire at the enemy waters!']
       : [...state.log, `Placed ${name}.`],
   };
 }
 
+/** Randomly places the ships not yet on the board, keeping manual placements. */
 export function placeRandomPlayerFleet(
   state: GameState,
   random: Random = Math.random,
 ): GameState {
+  if (state.phase !== 'placement') return state;
+
+  let playerBoard: Board;
+  try {
+    playerBoard = completeFleet(state.playerBoard, random);
+  } catch {
+    return withNotice(state, 'No room left for the remaining ships. Move or rotate a ship.');
+  }
+
   return {
     ...state,
-    playerBoard: randomFleet(random),
+    playerBoard,
     placingIndex: SHIP_SPECS.length,
     phase: 'player-turn',
+    notice: undefined,
     log: [...state.log, 'Fleet placed at random. Fire at the enemy waters!'],
   };
 }
@@ -111,7 +148,7 @@ export function playerFire(state: GameState, target: Coordinate): GameState {
   try {
     result = fireAt(state.computerBoard, target);
   } catch {
-    return state;
+    return withNotice(state, `You already fired at ${cellName(target)}.`);
   }
 
   const won = result.outcome === 'game-over';
@@ -120,6 +157,7 @@ export function playerFire(state: GameState, target: Coordinate): GameState {
     computerBoard: result.board,
     phase: won ? 'game-over' : 'computer-turn',
     winner: won ? 'player' : undefined,
+    notice: undefined,
     log: [...state.log, describe('You', result.outcome, target, result.sunkShip)],
   };
 }
@@ -128,8 +166,16 @@ export function playerFire(state: GameState, target: Coordinate): GameState {
 export function computerFire(state: GameState, random: Random = Math.random): GameState {
   if (state.phase !== 'computer-turn') return state;
 
-  const target = chooseShot(state.playerBoard, random);
-  const result = fireAt(state.playerBoard, target);
+  let target: Coordinate;
+  let result: ReturnType<typeof fireAt>;
+  try {
+    target = chooseShot(state.playerBoard, random);
+    result = fireAt(state.playerBoard, target);
+  } catch {
+    // Never strand the game in computer-turn: yield the turn back to the player.
+    return { ...state, phase: 'player-turn' };
+  }
+
   const lost = result.outcome === 'game-over';
 
   return {
