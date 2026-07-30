@@ -69,6 +69,12 @@ real cells (keeps evidence honest and visible in a recording):
   checkerboard) and wait ~750 ms after each shot for the computer's reply (`COMPUTER_TURN_DELAY_MS = 600`).
   Expect ~60 shots per game; a loss is a valid game over — click "New game", use "Place randomly" (a
   spread-out fleet survives longer) and retry to also demonstrate the win state.
+- To deliberately reach the LOSS state (`You lose. Your fleet has been destroyed.`), fire in plain
+  reading order (A1, B1, …) with no follow-up on hits — the computer's hunt-and-target wins first
+  (observed: loss in 47 player shots). After game over (win or loss) all 100 enemy cells are `disabled`.
+- The alert notice line shifts the whole layout ~20px vertically when it appears/disappears. When
+  clicking by screen coordinates, re-screenshot (or click by aria-label via CDP) after any action that
+  adds or clears the notice, or you will hit the wrong cell/button.
 
 ## Regression tests for the DEBUGGING.md findings
 All of findings A–H are fixed with unit/UI regression tests — run `npm test` first; the suite covers:
