@@ -68,3 +68,11 @@ export class InvalidShotError extends Error {
     this.name = 'InvalidShotError';
   }
 }
+
+/** Thrown when no legal position is left for a ship that still has to be placed. */
+export class NoRoomError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NoRoomError';
+  }
+}

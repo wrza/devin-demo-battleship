@@ -50,15 +50,28 @@ describe('game setup', () => {
     expect(game.phase).toBe('player-turn');
   });
 
-  it('ignores invalid placements', () => {
+  it('rejects invalid placements with an explanatory notice', () => {
     const game = createGame(seeded(1));
     const offBoard = placePlayerShip(game, { row: 0, col: 9 });
 
-    expect(offBoard).toBe(game);
+    expect(offBoard.playerBoard).toBe(game.playerBoard);
+    expect(offBoard.placingIndex).toBe(game.placingIndex);
+    expect(offBoard.log).toBe(game.log);
+    expect(offBoard.notice).toBe('The Carrier does not fit there.');
 
     const placed = placePlayerShip(game, { row: 0, col: 0 });
     const overlapping = placePlayerShip(placed, { row: 0, col: 0 });
-    expect(overlapping).toBe(placed);
+    expect(overlapping.playerBoard).toBe(placed.playerBoard);
+    expect(overlapping.notice).toBe('The Battleship would overlap another ship.');
+  });
+
+  it('clears the notice on the next accepted action', () => {
+    const game = createGame(seeded(1));
+    const rejected = placePlayerShip(game, { row: 0, col: 9 });
+    expect(rejected.notice).toBeDefined();
+
+    const accepted = placePlayerShip(rejected, { row: 0, col: 0 });
+    expect(accepted.notice).toBeUndefined();
   });
 
   it('toggles orientation and places vertically', () => {
@@ -80,6 +93,35 @@ describe('game setup', () => {
 
     expect(isFleetComplete(game.playerBoard)).toBe(true);
     expect(game.phase).toBe('player-turn');
+  });
+
+  it('keeps manually placed ships when the rest of the fleet is placed at random', () => {
+    let game = createGame(seeded(1));
+    game = placePlayerShip(game, { row: 0, col: 0 });
+    game = placePlayerShip(game, { row: 2, col: 0 });
+    const carrier = game.playerBoard.ships.find((s) => s.name === 'Carrier')!;
+    const battleship = game.playerBoard.ships.find((s) => s.name === 'Battleship')!;
+
+    const completed = placeRandomPlayerFleet(game, seeded(9));
+
+    expect(isFleetComplete(completed.playerBoard)).toBe(true);
+    expect(completed.playerBoard.ships.find((s) => s.name === 'Carrier')!.cells).toEqual(
+      carrier.cells,
+    );
+    expect(
+      completed.playerBoard.ships.find((s) => s.name === 'Battleship')!.cells,
+    ).toEqual(battleship.cells);
+    expect(completed.phase).toBe('player-turn');
+  });
+
+  it('only places the fleet at random during the placement phase', () => {
+    const game = placeFleetInRows(createGame(seeded(1)));
+    expect(game.phase).toBe('player-turn');
+
+    expect(placeRandomPlayerFleet(game, seeded(9))).toBe(game);
+
+    const over: GameState = { ...game, phase: 'game-over', winner: 'player' };
+    expect(placeRandomPlayerFleet(over, seeded(9))).toBe(over);
   });
 });
 
@@ -105,7 +147,26 @@ describe('turn taking', () => {
 
     game = computerFire(game, seeded(4));
     const repeat = playerFire(game, { row: 0, col: 0 });
-    expect(repeat).toBe(game);
+    expect(repeat.computerBoard).toBe(game.computerBoard);
+    expect(repeat.phase).toBe('player-turn');
+    expect(repeat.log).toBe(game.log);
+    expect(repeat.notice).toBe('You already fired at A1.');
+  });
+
+  it('returns the turn to the player when the computer cannot fire', () => {
+    let game = placeFleetInRows(createGame(seeded(1)));
+    game = playerFire(game, { row: 9, col: 9 });
+    expect(game.phase).toBe('computer-turn');
+
+    // A Random that always throws stands in for any engine failure mid-turn.
+    const broken: Random = () => {
+      throw new Error('boom');
+    };
+    const recovered = computerFire(game, broken);
+
+    expect(recovered.phase).toBe('player-turn');
+    expect(recovered.playerBoard).toBe(game.playerBoard);
+    expect(recovered.winner).toBeUndefined();
   });
 
   it('logs hits, misses and sinkings', () => {
@@ -133,8 +194,7 @@ describe('win and loss detection', () => {
     for (const target of targets) {
       game = playerFire(game, target);
       if (game.phase === 'computer-turn') {
-        // Keep the computer from ever hitting: it fires into its own random cells,
-        // but the game only ends when a full fleet is destroyed.
+        // Skip the computer's reply so the player can never lose first in this test.
         game = { ...game, phase: 'player-turn' };
       }
     }

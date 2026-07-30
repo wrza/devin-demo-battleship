@@ -9,6 +9,7 @@ import {
   sameCoordinate,
 } from './engine';
 import {
+  NoRoomError,
   SHIP_SPECS,
   type Board,
   type Coordinate,
@@ -20,25 +21,39 @@ export type Random = () => number;
 const ORIENTATIONS: Orientation[] = ['horizontal', 'vertical'];
 
 function pick<T>(items: T[], random: Random): T {
-  return items[Math.floor(random() * items.length)];
+  if (items.length === 0) throw new Error('Cannot pick from an empty list');
+  // Random is contractually [0, 1), but clamp so a boundary value cannot index out of bounds.
+  return items[Math.min(items.length - 1, Math.floor(random() * items.length))];
 }
 
-/** Places the full standard fleet at random valid positions. */
-export function randomFleet(random: Random = Math.random): Board {
-  let board = createEmptyBoard();
+/**
+ * Places the ships of the standard fleet that `board` is still missing,
+ * at random valid positions, keeping the ships already on it.
+ */
+export function completeFleet(board: Board, random: Random = Math.random): Board {
+  let next = board;
   for (const spec of SHIP_SPECS) {
+    if (next.ships.some((ship) => ship.name === spec.name)) continue;
     const options: { start: Coordinate; orientation: Orientation }[] = [];
     for (const start of allCoordinates()) {
       for (const orientation of ORIENTATIONS) {
-        if (canPlaceShip(board, spec.name, start, orientation)) {
+        if (canPlaceShip(next, spec.name, start, orientation)) {
           options.push({ start, orientation });
         }
       }
     }
+    if (options.length === 0) {
+      throw new NoRoomError(`No legal position left for the ${spec.name}`);
+    }
     const choice = pick(options, random);
-    board = placeShip(board, spec.name, choice.start, choice.orientation);
+    next = placeShip(next, spec.name, choice.start, choice.orientation);
   }
-  return board;
+  return next;
+}
+
+/** Places the full standard fleet at random valid positions. */
+export function randomFleet(random: Random = Math.random): Board {
+  return completeFleet(createEmptyBoard(), random);
 }
 
 const NEIGHBOUR_OFFSETS: Coordinate[] = [

@@ -248,13 +248,35 @@ describe('win condition detection', () => {
     expect(remainingShips(final.board)).toEqual([]);
   });
 
-  it('does not declare a win for an incomplete fleet whose ships are all sunk', () => {
+  it('declares a win when every ship on the board is sunk, whatever the fleet size', () => {
     const board = sink(
       boardWith([['Destroyer', { row: 0, col: 0 }, 'horizontal']]),
       'Destroyer',
     );
 
-    expect(allShipsSunk(board)).toBe(false);
+    expect(allShipsSunk(board)).toBe(true);
+  });
+
+  it('ends the game on the final shot of a non-standard fleet', () => {
+    const board = boardWith([
+      ['Destroyer', { row: 0, col: 0 }, 'horizontal'],
+      ['Cruiser', { row: 2, col: 0 }, 'horizontal'],
+    ]);
+
+    const partial = sink(board, 'Cruiser');
+    expect(allShipsSunk(partial)).toBe(false);
+
+    const penultimate = fireAt(partial, { row: 0, col: 0 });
+    expect(penultimate.outcome).toBe('hit');
+
+    const final = fireAt(penultimate.board, { row: 0, col: 1 });
+    expect(final.outcome).toBe('game-over');
+    expect(allShipsSunk(final.board)).toBe(true);
+  });
+
+  it('never declares a win for a board with no ships', () => {
+    expect(allShipsSunk(createEmptyBoard())).toBe(false);
+    expect(allShipsSunk(fireAt(createEmptyBoard(), { row: 0, col: 0 }).board)).toBe(false);
   });
 
   it('does not treat misses as progress toward a win', () => {

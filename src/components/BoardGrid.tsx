@@ -85,7 +85,7 @@ export function BoardGrid({
                   type="button"
                   className={`${cellClass(state, view)}${previewClass}`}
                   aria-label={`${label} ${name}: ${state}`}
-                  disabled={disabled || !onCellClick}
+                  disabled={disabled || !onCellClick || state === 'hit' || state === 'miss'}
                   onMouseEnter={() => preview && setHovered(cell)}
                   onFocus={() => preview && setHovered(cell)}
                   onClick={() => onCellClick?.(cell)}

@@ -23,17 +23,19 @@ description: How to run and end-to-end test the single-player Battleship web app
   `Your ships` / `Enemy ships` `<h3>`; sunk ships render the text `sunk` with a strikethrough.
 - Cells are `disabled` outside the phase that owns them, so "click is ignored" checks are meaningful:
   enemy cells are disabled during placement and after game over; player cells are disabled during battle.
-- Invalid placements (overflow/overlap) are silent no-ops: assert on the *status line* and the fleet panel
-  ("not placed"), not on an error message. The only feedback is the red hover preview
-  (`cell-preview-invalid`), and it is clipped to the board, so hovering H1 with the Carrier highlights
-  only H1–J1, never the 5-cell footprint that failed.
-- Cells are only disabled *per phase*, never per cell state: during your turn an already-fired enemy cell
-  stays `disabled=false` and re-clicking it is a completely silent no-op (no log entry, no status change).
-  Assert on the battle-log entry count plus the status text to prove "nothing happened".
-- The `Enemy ships` panel is the same component as `Your ships`, so it shows a partial per-ship hit
-  counter (e.g. `Battleship (4) 1/4`) as soon as a hit lands — it leaks which enemy ship was hit before
-  it sinks (documented in `DEBUGGING.md` finding A). If a PR claims to fix this, assert the opponent
-  panel only ever shows `sunk` / `afloat`, never `N/L`.
+- Rejected actions surface a `role="alert"` notice line under the status (DEBUGGING.md finding E, fixed):
+  an invalid placement shows e.g. `The Carrier does not fit there.` / `The Battleship would overlap
+  another ship.`, a repeat shot shows `You already fired at A1.`, and the next accepted action clears it.
+  Assert on `[role="alert"]` — the board/log/status must stay unchanged. The red hover preview
+  (`cell-preview-invalid`) still exists and is clipped to the board (hovering H1 with the Carrier
+  reddens only H1–J1).
+- Already-fired cells (`hit`/`miss` state) are `disabled` in every phase, on top of the per-phase
+  disabling. To reproduce the old "silent repeat shot" regression, assert a fired enemy cell has
+  `disabled=true` during your turn.
+- The `Enemy ships` panel is opponent-view only (finding A, fixed): it shows `afloat` or `sunk`, never a
+  partial `N/L` counter and never `not placed`. `Your ships` still shows `N/L` progress. Regression
+  check: after a hit that doesn't sink, the log says `hit!` and the enemy panel must still read `afloat`
+  for every un-sunk ship (`FleetStatus.test.tsx` covers this in jsdom).
 - Reading state compactly is much cheaper than dumping the DOM: one `page.evaluate`/console snippet
   returning `{status, logs, enemyPanel, yourPanel, grids}` keyed by `aria-label` is enough for every
   assertion, and keeps clicks (which the user watches) in the real UI.
@@ -46,8 +48,10 @@ description: How to run and end-to-end test the single-player Battleship web app
   A blank page with a 404 on `/devin-demo-battleship/assets/index-*.js` means a base-path/deploy problem.
 - The CDP helper works against the live page too; just match the page by URL substring
   `wrza.github.io/devin-demo-battleship` instead of the localhost port.
-- Careful: "Place randomly" re-randomises the **whole** fleet, discarding ships you placed manually. Do
-  manual-placement assertions first, then use it to finish.
+- "Place randomly" now **keeps** manually placed ships and only fills in the missing ones (finding D,
+  fixed; `completeFleet` in `src/game/ai.ts`), and it is a no-op outside the placement phase.
+  Regression check: place the Carrier at A1 by hand, click "Place randomly", and assert A1–E1 are still
+  ship cells and the phase advanced to battle.
 
 ## Reaching a game over quickly
 Playing 17+ hits by hand is slow. Connect Playwright over CDP to the already-open browser and click the
@@ -65,6 +69,22 @@ real cells (keeps evidence honest and visible in a recording):
   checkerboard) and wait ~750 ms after each shot for the computer's reply (`COMPUTER_TURN_DELAY_MS = 600`).
   Expect ~60 shots per game; a loss is a valid game over — click "New game", use "Place randomly" (a
   spread-out fleet survives longer) and retry to also demonstrate the win state.
+
+## Regression tests for the DEBUGGING.md findings
+All of findings A–G are fixed with unit/UI regression tests — run `npm test` first; the suite covers:
+- A: opponent fleet panel never leaks hit progress (`src/components/FleetStatus.test.tsx`).
+- B: `allShipsSunk` works for any non-empty fleet size, `game-over` fires on the exact final shot of a
+  non-standard fleet, and an empty board is never a win (`src/game/engine.test.ts`).
+- C: `placeRandomPlayerFleet` is a no-op outside the placement phase (`src/game/state.test.ts`).
+- D: manual placements survive "Place randomly" (state test + `src/App.test.tsx`).
+- E: rejected placements/shots set `state.notice` with the reason and the UI renders it as an alert;
+  fired cells are disabled (`src/game/state.test.ts`, `src/App.test.tsx`).
+- F: `computerFire` survives a throwing `Random` and returns the turn to the player
+  (`src/game/state.test.ts`).
+- G: `randomFleet(() => 1)` produces a valid fleet (`src/game/ai.test.ts`).
+Finding H (ARIA grid semantics) is still open — the grid is `role="grid"` → `role="row"` → bare
+buttons without `gridcell`, so don't rely on grid-navigation semantics in tests; use the buttons'
+`aria-label`s.
 
 ## Devin Secrets Needed
 None.
