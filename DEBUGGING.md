@@ -15,9 +15,8 @@ in the test suite as intended behaviour.
 
 Nothing found here corrupts a game in progress or makes the game unwinnable.
 
-> **Status update.** Findings A–G were fixed in the follow-up PR that accompanies this revision of
-> the document, each with a regression test; the per-finding "How it was fixed" sections below
-> describe the actual fix. Finding H (ARIA grid semantics) remains open.
+> **Status update.** All findings A–H have been fixed in follow-up PRs, each with a regression
+> test; the per-finding "How it was fixed" sections below describe the actual fixes.
 
 ---
 
@@ -320,7 +319,11 @@ row/column header cells `aria-hidden="true"`.
 button's `aria-label` spells out the coordinate and state ("Enemy waters C2: hit"), which is also
 what makes the app easy to drive from tests. Low severity, real defect.
 
-**How it was fixed.** Not fixed.
+**How it was fixed.** Each cell button is now wrapped in a `role="gridcell"` element, the letter
+headers are `role="columnheader"`, the number headers `role="rowheader"`, and no header is
+`aria-hidden` any more. The buttons and their `aria-label`s are unchanged, so existing tests and
+tooling that address cells by label keep working. A regression test asserts the grid exposes 11
+rows, 11 column headers, and 10 gridcells per row with nothing hidden.
 
 ---
 
@@ -586,7 +589,7 @@ termination, `winner`, duplicate-shot and hit-count invariants each turn.
 | B | `allShipsSunk` hard-codes the five-ship fleet; other fleet sizes never end | Low now, latent | No | Fixed |
 | C | `placeRandomPlayerFleet` has no phase guard | Low now, latent | No (JSX-gated) | Fixed |
 | F | `computerFire` unguarded inside a `setTimeout` | Low now, latent | No | Fixed |
-| H | `role="grid"` without `gridcell`; headers `aria-hidden` | Low (a11y) | Yes | Open |
+| H | `role="grid"` without `gridcell`; headers `aria-hidden` | Low (a11y) | Yes | Fixed |
 | G | `pick` indexes out of bounds when an injected `Random` returns 1 | Low | No | Fixed |
 
 Test-suite issues (5.1, 5.4) are not ranked as product defects, but they are the reason A–H

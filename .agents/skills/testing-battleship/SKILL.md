@@ -71,7 +71,7 @@ real cells (keeps evidence honest and visible in a recording):
   spread-out fleet survives longer) and retry to also demonstrate the win state.
 
 ## Regression tests for the DEBUGGING.md findings
-All of findings A–G are fixed with unit/UI regression tests — run `npm test` first; the suite covers:
+All of findings A–H are fixed with unit/UI regression tests — run `npm test` first; the suite covers:
 - A: opponent fleet panel never leaks hit progress (`src/components/FleetStatus.test.tsx`).
 - B: `allShipsSunk` works for any non-empty fleet size, `game-over` fires on the exact final shot of a
   non-standard fleet, and an empty board is never a win (`src/game/engine.test.ts`).
@@ -82,9 +82,9 @@ All of findings A–G are fixed with unit/UI regression tests — run `npm test`
 - F: `computerFire` survives a throwing `Random` and returns the turn to the player
   (`src/game/state.test.ts`).
 - G: `randomFleet(() => 1)` produces a valid fleet (`src/game/ai.test.ts`).
-Finding H (ARIA grid semantics) is still open — the grid is `role="grid"` → `role="row"` → bare
-buttons without `gridcell`, so don't rely on grid-navigation semantics in tests; use the buttons'
-`aria-label`s.
+- H: the grid is a valid ARIA grid — `role="grid"` → `role="row"` → `role="gridcell"` wrapping each
+  cell button, with `columnheader`/`rowheader` headers (nothing `aria-hidden`). The buttons and their
+  `aria-label`s are unchanged, so addressing cells by label still works (`src/App.test.tsx`).
 
 ## Devin Secrets Needed
 None.

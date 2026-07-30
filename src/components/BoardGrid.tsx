@@ -55,16 +55,16 @@ export function BoardGrid({
       <h2 className="board-label">{label}</h2>
       <div className="grid" role="grid" aria-label={label} onMouseLeave={() => setHovered(null)}>
         <div className="grid-row" role="row">
-          <div className="cell cell-header" aria-hidden="true" />
+          <div className="cell cell-header" role="columnheader" aria-label="Row number" />
           {COLUMN_LABELS.map((letter) => (
-            <div key={letter} className="cell cell-header" aria-hidden="true">
+            <div key={letter} className="cell cell-header" role="columnheader">
               {letter}
             </div>
           ))}
         </div>
         {Array.from({ length: BOARD_SIZE }, (_, row) => (
           <div className="grid-row" key={row} role="row">
-            <div className="cell cell-header" aria-hidden="true">
+            <div className="cell cell-header" role="rowheader">
               {row + 1}
             </div>
             {Array.from({ length: BOARD_SIZE }, (_, col) => {
@@ -80,18 +80,19 @@ export function BoardGrid({
                 : '';
 
               return (
-                <button
-                  key={col}
-                  type="button"
-                  className={`${cellClass(state, view)}${previewClass}`}
-                  aria-label={`${label} ${name}: ${state}`}
-                  disabled={disabled || !onCellClick || state === 'hit' || state === 'miss'}
-                  onMouseEnter={() => preview && setHovered(cell)}
-                  onFocus={() => preview && setHovered(cell)}
-                  onClick={() => onCellClick?.(cell)}
-                >
-                  {state === 'hit' ? '✕' : state === 'miss' ? '•' : ''}
-                </button>
+                <div key={col} role="gridcell" className="gridcell">
+                  <button
+                    type="button"
+                    className={`${cellClass(state, view)}${previewClass}`}
+                    aria-label={`${label} ${name}: ${state}`}
+                    disabled={disabled || !onCellClick || state === 'hit' || state === 'miss'}
+                    onMouseEnter={() => preview && setHovered(cell)}
+                    onFocus={() => preview && setHovered(cell)}
+                    onClick={() => onCellClick?.(cell)}
+                  >
+                    {state === 'hit' ? '✕' : state === 'miss' ? '•' : ''}
+                  </button>
+                </div>
               );
             })}
           </div>

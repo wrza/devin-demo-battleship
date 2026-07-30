@@ -42,6 +42,19 @@ describe('App', () => {
     expect(within(log).getByText(/You fired at A1/)).toBeTruthy();
   });
 
+  it('exposes the board as a navigable ARIA grid', () => {
+    render(<App />);
+
+    const grid = screen.getByRole('grid', { name: 'Your fleet' });
+    const rows = within(grid).getAllByRole('row');
+    expect(rows).toHaveLength(11); // header row + 10 board rows
+
+    expect(within(rows[0]).getAllByRole('columnheader')).toHaveLength(11);
+    expect(within(rows[1]).getByRole('rowheader').textContent).toBe('1');
+    expect(within(rows[1]).getAllByRole('gridcell')).toHaveLength(10);
+    expect(grid.querySelector('[aria-hidden]')).toBeNull();
+  });
+
   it('disables enemy cells during placement', () => {
     render(<App />);
 
