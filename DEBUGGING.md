@@ -15,6 +15,10 @@ in the test suite as intended behaviour.
 
 Nothing found here corrupts a game in progress or makes the game unwinnable.
 
+> **Status update.** Findings A–G were fixed in the follow-up PR that accompanies this revision of
+> the document, each with a regression test; the per-finding "How it was fixed" sections below
+> describe the actual fix. Finding H (ARIA grid semantics) remains open.
+
 ---
 
 ## 1. Method
@@ -138,10 +142,10 @@ So the leak is worth roughly **zero shots** to a competent player (the small dif
 targeting-order noise, and it went the wrong way), because the ambiguous situations it resolves
 are rare. It is a fidelity defect that spoils information, not an exploit.
 
-**How it was fixed.** Not fixed. Documented here. The fix is a `view: 'owner' | 'opponent'` prop on
-`FleetStatus` that renders `sunk` / `afloat` for the opponent instead of a hit counter, mirroring
-`cellState` vs `opponentCellState`, plus a test asserting the opponent panel never shows a partial
-count.
+**How it was fixed.** `FleetStatus` now takes a `view: 'owner' | 'opponent'` prop, mirroring
+`cellState` vs `opponentCellState`: the opponent view renders only `sunk` / `afloat`, never a hit
+counter and never `not placed`. `FleetStatus.test.tsx` asserts the opponent view never shows a
+partial count for a wounded ship.
 
 ### B. `allShipsSunk` silently requires exactly five ships — Low today, latent trap
 
@@ -173,9 +177,11 @@ five ships, so such a game never ends. See section 5.1 — this is a workaround,
 variant fleet or a smaller test fixture — the game will hang silently at "one ship left" with no
 error anywhere.
 
-**How it was fixed.** Not fixed. The cause-level fix is `board.ships.length > 0 && every(sunk)`
-in `allShipsSunk`, and moving the "is the fleet ready" question to the callers that actually ask
-it (`placePlayerShip` already calls `isFleetComplete` for exactly that purpose).
+**How it was fixed.** `allShipsSunk` is now `board.ships.length > 0 && board.ships.every(isShipSunk)`
+— the `ships.length > 0` guard fixes the vacuous-truth case at the cause without hard-coding the
+fleet size. The `engine.test.ts` test that locked the workaround in (see 5.1) was inverted to
+assert the correct semantics, and new tests cover `game-over` on the final shot of a non-standard
+fleet and the empty board.
 
 ### C. `placeRandomPlayerFleet` has no phase guard — Low today, latent
 
@@ -199,7 +205,9 @@ inconsistent (`phase: 'player-turn'` with `winner: 'computer'`).
 `game.phase === 'placement'`. The invariant is enforced by JSX, not by the state machine, so the
 first extra call site (a keyboard shortcut, a "reroll" button, an undo) reintroduces it.
 
-**How it was fixed.** Not fixed. One-line guard: `if (state.phase !== 'placement') return state;`.
+**How it was fixed.** `placeRandomPlayerFleet` now starts with
+`if (state.phase !== 'placement') return state;`, the same contract as every other transition,
+with a regression test calling it from `player-turn` and `game-over`.
 
 ### D. "Place randomly" destroys manual placements without warning — Low (UX)
 
@@ -214,10 +222,11 @@ placement toolbar next to *Rotate*, which acts on the ship being placed), or an 
 **Cause.** `placeRandomPlayerFleet` calls `randomFleet()` for the whole fleet from scratch instead
 of completing `state.playerBoard` from `state.placingIndex` onward.
 
-**How it was fixed.** Not fixed — this is the behaviour the skill file tells testers to work
-around ("Careful: 'Place randomly' re-randomises the **whole** fleet"). See section 5.3. The
-cause-level fix is to fill only the remaining ships, which also makes the button useful after a
-partial placement.
+**How it was fixed.** `placeRandomPlayerFleet` now calls a new `completeFleet(board, random)`
+(`ai.ts`), which keeps the ships already on the board and randomly places only the missing ones;
+`randomFleet` is now `completeFleet(createEmptyBoard())`. Manual placements survive the button,
+verified at both the state layer and through the rendered UI. If completion is ever impossible the
+state gets a `notice` instead of a crash. The skill file's warning was replaced accordingly.
 
 ### E. Rejected actions are silent, and the engine's reasons are thrown away — Low/Medium (UX)
 
@@ -249,9 +258,12 @@ so hovering H1 with the Carrier reddens H1–J1 and the two cells that overflow 
 not drawn — the feedback shows a 3-cell ship, not the 5-cell footprint that is being rejected
 (confirmed in a browser).
 
-**How it was fixed.** Not fixed. Cause-level fix: return the caught error (or its `reason`) on the
-state as a transient `notice` field and render it in the status line, and add
-`|| state === 'hit' || state === 'miss'` to the enemy grid's `disabled` condition.
+**How it was fixed.** `GameState` gained a transient `notice` field: rejected placements map
+`PlacementError.reason` to a human explanation ("The Carrier does not fit there.", "…would overlap
+another ship."), repeat shots produce "You already fired at A1.", and any accepted action clears
+it. `App.tsx` renders it as a `role="alert"` line under the status. Separately, `BoardGrid` now
+disables any cell whose state is `hit` or `miss`, so a spent cell can no longer absorb clicks.
+The clipped red preview still exists, but it is no longer the only feedback.
 
 ### F. `computerFire` is unguarded where `playerFire` is guarded — Low, latent
 
@@ -272,7 +284,9 @@ a fleet. So this is a robustness gap, not a live bug — but it is the one place
 change (a "computer vs computer" mode, a smaller board, resuming a saved game) turns into an
 unrecoverable UI.
 
-**How it was fixed.** Not fixed.
+**How it was fixed.** `computerFire` now wraps `chooseShot`/`fireAt` in a `try/catch`; on failure
+it yields the turn back to the player (`phase: 'player-turn'`) instead of stranding the game in
+`computer-turn`, with a regression test injecting a throwing `Random`.
 
 ### G. The injected `Random` contract is unenforced — Low
 
@@ -289,8 +303,8 @@ a boundary value.
 **Impact.** `Math.random()` is specified as `[0, 1)`, so production never hits it; the exposure is
 to test doubles and seeded generators written by future callers.
 
-**How it was fixed.** Not fixed. One-line fix: `Math.min(items.length - 1, Math.floor(random() *
-items.length))`.
+**How it was fixed.** `pick` now clamps the index with `Math.min(items.length - 1, …)` and throws
+a clear error for an empty list. `randomFleet(() => 1)` now produces a valid fleet (tested).
 
 ### H. The board is not a valid ARIA grid — Low (accessibility)
 
@@ -430,6 +444,9 @@ Three things make this worse than it looks:
    kind of test creates. The PR description reinforced it: "`allShipsSunk` deliberately requires a
    *complete* fleet".
 
+Resolved with finding B: the guard is now `ships.length > 0` and the locking test was inverted to
+assert the correct semantics.
+
 ### 5.2 The Pages preview base-path problem was documented, not fixed
 
 `package.json`'s `preview` script is plain `vite preview`, so it serves with `base: '/'` while the
@@ -490,6 +507,9 @@ are sunk", is vacuous: it mutates `computerBoard` by calling `fireAt` directly a
 `phase === 'player-turn'` and `winner === undefined`. Since `playerFire` was never called, those
 assertions hold no matter what the win logic does. It would pass against a completely broken win
 condition.
+
+The misleading comment was corrected alongside the A–G fixes; the phase-skipping shortcut and the
+vacuous partial-sink test remain as-is (rewriting them is test-suite work beyond the bug fixes).
 
 ### 5.5 The PR's "no application defects found" claim was overstated
 
@@ -558,16 +578,16 @@ termination, `winner`, duplicate-shot and hit-count invariants each turn.
 
 ## 7. Ranked list
 
-| # | Finding | Severity | Reachable in the shipped UI |
-| --- | --- | --- | --- |
-| A | Enemy fleet panel reveals which ship was hit, ~6.1 shots early | Medium (rules fidelity; ~0 shots of real advantage) | Yes |
-| E | Rejected placements/repeat shots give no feedback; fired cells stay clickable | Low/Medium (UX) | Yes |
-| D | "Place randomly" silently discards manual placements | Low (UX, data loss) | Yes |
-| B | `allShipsSunk` hard-codes the five-ship fleet; other fleet sizes never end | Low now, latent | No |
-| C | `placeRandomPlayerFleet` has no phase guard | Low now, latent | No (JSX-gated) |
-| F | `computerFire` unguarded inside a `setTimeout` | Low now, latent | No |
-| H | `role="grid"` without `gridcell`; headers `aria-hidden` | Low (a11y) | Yes |
-| G | `pick` indexes out of bounds when an injected `Random` returns 1 | Low | No |
+| # | Finding | Severity | Reachable in the shipped UI | Status |
+| --- | --- | --- | --- | --- |
+| A | Enemy fleet panel reveals which ship was hit, ~6.1 shots early | Medium (rules fidelity; ~0 shots of real advantage) | Yes | Fixed |
+| E | Rejected placements/repeat shots give no feedback; fired cells stay clickable | Low/Medium (UX) | Yes | Fixed |
+| D | "Place randomly" silently discards manual placements | Low (UX, data loss) | Yes | Fixed |
+| B | `allShipsSunk` hard-codes the five-ship fleet; other fleet sizes never end | Low now, latent | No | Fixed |
+| C | `placeRandomPlayerFleet` has no phase guard | Low now, latent | No (JSX-gated) | Fixed |
+| F | `computerFire` unguarded inside a `setTimeout` | Low now, latent | No | Fixed |
+| H | `role="grid"` without `gridcell`; headers `aria-hidden` | Low (a11y) | Yes | Open |
+| G | `pick` indexes out of bounds when an injected `Random` returns 1 | Low | No | Fixed |
 
 Test-suite issues (5.1, 5.4) are not ranked as product defects, but they are the reason A–H
 survived a green suite: 43 passing tests, and none of them look at the opponent fleet panel, play

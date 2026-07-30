@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import App from './App';
@@ -47,5 +47,42 @@ describe('App', () => {
 
     const enemyCell = screen.getByRole('button', { name: /^Enemy waters A1:/ });
     expect((enemyCell as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('shows a notice for an invalid placement instead of failing silently', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(playerCell('H1'));
+
+    expect(screen.getByRole('alert').textContent).toBe('The Carrier does not fit there.');
+    expect(screen.getByRole('status').textContent).toMatch(/Place your Carrier/);
+  });
+
+  it('disables an enemy cell once it has been fired at', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Place randomly' }));
+    await user.click(screen.getByRole('button', { name: /^Enemy waters A1:/ }));
+    await waitFor(() =>
+      expect(screen.getByRole('status').textContent).toMatch(/Your turn|You (win|lose)/),
+    );
+
+    const fired = screen.getByRole('button', { name: /^Enemy waters A1: (hit|miss)/ });
+    expect((fired as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('keeps manually placed ships when placing the rest randomly', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(playerCell('A1'));
+    await user.click(screen.getByRole('button', { name: 'Place randomly' }));
+
+    for (const name of ['A1', 'B1', 'C1', 'D1', 'E1']) {
+      expect(playerCell(name).className).toMatch(/cell-ship/);
+    }
+    expect(screen.getByRole('status').textContent).toMatch(/Your turn/);
   });
 });

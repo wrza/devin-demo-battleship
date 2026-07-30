@@ -42,6 +42,11 @@ export default function App() {
         <p className="status" role="status">
           {status}
         </p>
+        {game.notice && (
+          <p className="notice" role="alert">
+            {game.notice}
+          </p>
+        )}
         <div className="controls">
           {game.phase === 'placement' && (
             <>
@@ -77,7 +82,7 @@ export default function App() {
                 : undefined
             }
           />
-          <FleetStatus board={game.playerBoard} title="Your ships" />
+          <FleetStatus board={game.playerBoard} title="Your ships" view="owner" />
         </div>
 
         <div className="board-column">
@@ -92,7 +97,7 @@ export default function App() {
                 : undefined
             }
           />
-          <FleetStatus board={game.computerBoard} title="Enemy ships" />
+          <FleetStatus board={game.computerBoard} title="Enemy ships" view="opponent" />
         </div>
       </div>
 
